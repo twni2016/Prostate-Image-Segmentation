@@ -7,7 +7,7 @@ from torchvision import datasets
 from torchvision import transforms
 import torchvision as tv
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 
 if __name__ == '__main__':
@@ -15,7 +15,7 @@ if __name__ == '__main__':
 	# argparse settings
 	import argparse
 	parser = argparse.ArgumentParser(description='PROS12')
-	parser.add_argument('-b', '--batch', type=int, default=48, help='input batch size for training (default: 64)')
+	parser.add_argument('-b', '--batch', type=int, default=32, help='input batch size for training (default: 64)')
 	parser.add_argument('-e', '--epoch', type=int, default=55, help='number of epochs to train (default: 50)')
 	parser.add_argument('--lr', type=float, default=0.001, help='learning rate (default: 0.001)')
 	parser.add_argument('--gpu', type=int, default=4, help='GPU (default: 4)')
@@ -45,18 +45,21 @@ if __name__ == '__main__':
 	testloader = torch.utils.data.DataLoader(testing_set, batch_size=batch_size, shuffle=True)
 
 
-def to_var(x, volatile):
+def to_var(x):
 	if torch.cuda.is_available():
 		x = x.cuda()
-	return Variable(x,volatile=volatile)
+	return Variable(x)
 
 
 class DownTransition(nn.Module):
 
-	def __init__(self,inchan,outchan,layer,dilation_=1):
+	def __init__(self,inchan,layer,dilation_=1):
 		super(DownTransition, self).__init__()
 		self.dilation_ = dilation_
-		self.outchan = outchan
+		if inchan == 1: 
+			self.outchan = 8
+		else:
+			self.outchan = 2*inchan
 		self.layer = layer
 		self.down = nn.Conv2d(in_channels=inchan,out_channels=self.outchan,kernel_size=3,padding=1,stride=2) # /2
 		self.bn = nn.BatchNorm2d(num_features=self.outchan,affine=True)
@@ -83,10 +86,10 @@ class DownTransition(nn.Module):
 
 class UpTransition(nn.Module):
 
-	def __init__(self,inchan,outchan,layer,last=False):
+	def __init__(self,inchan,layer,last=False):
 		super(UpTransition, self).__init__()
 		self.last = last
-		self.outchan = outchan
+		self.outchan = inchan//2
 		self.layer = layer
 		self.up =  nn.ConvTranspose2d(in_channels=inchan,out_channels=self.outchan,kernel_size=4,padding=1,stride=2) # *2
 		self.bn = nn.BatchNorm2d(num_features=self.outchan,affine=True)
@@ -135,16 +138,16 @@ class Vnet(nn.Module):
 				nn.BatchNorm2d(8,affine=True),
 				nn.ELU(inplace=True)
 			)
-		self.down0 = DownTransition(inchan=8,outchan=16,layer=2,dilation_=2)  # 16*256^2
-		self.down1 = DownTransition(inchan=16,outchan=32,layer=2,dilation_=2) # 32*128^2
-		self.down2 = DownTransition(inchan=32,outchan=64,layer=2,dilation_=4) # 64*64^2
-		self.down3 = DownTransition(inchan=64,outchan=128,layer=2,dilation_=4) # 128*32^2
+		self.down0 = DownTransition(inchan=8,layer=2,dilation_=2)  # 16*256^2
+		self.down1 = DownTransition(inchan=16,layer=2,dilation_=2) # 32*128^2
+		self.down2 = DownTransition(inchan=32,layer=2,dilation_=2) # 64*64^2
+		self.down3 = DownTransition(inchan=64,layer=2,dilation_=4) # 128*32^2
 		
 
-		self.up3 = UpTransition(inchan=128,outchan=64,layer=2) # 64*64^2
-		self.up2 = UpTransition(inchan=64,outchan=32,layer=2) # 32*128^2
-		self.up1 = UpTransition(inchan=32,outchan=16,layer=2) # 16*256^2
-		self.up0 = UpTransition(inchan=16,outchan=4,layer=2,last=True) # 2*512^2
+		self.up3 = UpTransition(inchan=128,layer=2) # 64*64^2
+		self.up2 = UpTransition(inchan=64,layer=2) # 32*128^2
+		self.up1 = UpTransition(inchan=32,layer=2) # 16*256^2
+		self.up0 = UpTransition(inchan=16,layer=2,last=True) # 2*512^2
 
 		for m in self.modules():
 			if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
@@ -184,6 +187,18 @@ class dice_loss(nn.Module):
 		return score
 
 import bioloss
+# import scipy.signal
+# from scipy.ndimage import filters
+
+# xx and yy are 200x200 tables containing the x and y coordinates as values
+# mgrid is a mesh creation helper
+xx, yy = np.mgrid[:512, :512]
+# circles contains the squared distance to the (100, 100) point
+# we are just using the circle equation learnt at school
+circle = (xx - 255.5) ** 2 + (yy - 255.5) ** 2
+# donuts contains 1's and 0's organized in a donut shape
+# you apply 2 thresholds on circle to define the shape
+donut = (circle < 3500)
 
 
 if __name__ == '__main__':
@@ -208,13 +223,13 @@ if __name__ == '__main__':
 
 			# print ("Train Epoch[%d/%d], Iter[%d]" %(e+1, epoch, index))			
 			optimizer.zero_grad()
-			image, target = to_var(image,volatile=False), to_var(target,volatile=False).float()
+			image, target = to_var(image), to_var(target).float()
 			output = vnet(image) # (N,HW)
 
 			target = target.view(target.numel())
 			loss = bioloss.dice_loss(output, target)
 			#loss = F.nll_loss(output, target)
-			total_loss += loss.data[0]
+			total_loss += loss
 			loss.backward()
 			optimizer.step()
 
@@ -247,16 +262,31 @@ if __name__ == '__main__':
 		for index,(image,target) in enumerate(testloader):
 
 			# print ("Valid Epoch[%d/%d], Iter[%d]" %(e+1, epoch, index))	
-			image, target = to_var(image,volatile=True), to_var(target,volatile=True).float()
+			image, target = to_var(image), to_var(target).float()
 			output = vnet(image)
 
 			target = target.view(target.numel()) # (NDHW)
 			# total_loss += F.nll_loss(output, target)
 			loss = bioloss.dice_loss(output, target)
-			total_loss += loss.data[0]
+			total_loss += loss
 
-			del image, target, loss, output
+			output = output.data.max(dim=1)[1].cpu().numpy().reshape(-1,512,512)
 
+			output = output * donut # broadcasting
+
+			# for i in range(batch_size):
+			# 	# output[i] = scipy.signal.medfilt(output[i], 3)
+			# 	output[i] = filters.median_filter(output[i], 3)
+
+			tmp = np.zeros((batch_size,512,512,2))
+			tmp[output>0,1] = 1
+			# print('tmp',tmp.sum())
+			tmp = tmp.reshape(-1,2)
+			tmp = to_var(torch.from_numpy(tmp)).float()
+			print(torch.sum(tmp))
+
+			loss = bioloss.dice_loss(tmp, target)
+			new_loss += loss
 
 			# if e == 50 or e == 32:
 			# 	image = image.data.cpu().numpy().reshape(-1,512,512)
@@ -304,6 +334,7 @@ if __name__ == '__main__':
 
 
 		print ("Epoch[%d/%d], Valid Dice Coef: %.4f" %(e+1, epoch, total_loss/len(testloader)))
+		print ("Epoch[%d/%d], Valid Dice Coef after back-end: %.4f" %(e+1, epoch, new_loss/len(testloader)))
 		# print ("Epoch[%d/%d], Valid Loss: %.2f, Valid Acc: %.2f" %(e+1, epoch, total_loss, 100*accuracy/cnt))
 
 

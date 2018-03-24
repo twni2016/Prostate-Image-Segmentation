@@ -1,4 +1,7 @@
 # Baseline Code
+import numpy as np
+from scipy.misc import imresize
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,17 +9,17 @@ from torch.autograd import Variable
 from torchvision import datasets
 from torchvision import transforms
 import torchvision as tv
-import numpy as np
-import matplotlib.pyplot as plt
 
+import pydensecrf.densecrf as dcrf
+from pydensecrf.utils import compute_unary, create_pairwise_bilateral, create_pairwise_gaussian, unary_from_softmax
 
 if __name__ == '__main__':
 
 	# argparse settings
 	import argparse
 	parser = argparse.ArgumentParser(description='PROS12')
-	parser.add_argument('-b', '--batch', type=int, default=48, help='input batch size for training (default: 64)')
-	parser.add_argument('-e', '--epoch', type=int, default=55, help='number of epochs to train (default: 50)')
+	parser.add_argument('-b', '--batch', type=int, default=64, help='input batch size for training (default: 64)')
+	parser.add_argument('-e', '--epoch', type=int, default=75, help='number of epochs to train (default: 50)')
 	parser.add_argument('--lr', type=float, default=0.001, help='learning rate (default: 0.001)')
 	parser.add_argument('--gpu', type=int, default=4, help='GPU (default: 4)')
 	args = parser.parse_args()
@@ -45,18 +48,21 @@ if __name__ == '__main__':
 	testloader = torch.utils.data.DataLoader(testing_set, batch_size=batch_size, shuffle=True)
 
 
-def to_var(x, volatile):
+def to_var(x):
 	if torch.cuda.is_available():
 		x = x.cuda()
-	return Variable(x,volatile=volatile)
+	return Variable(x)
 
 
 class DownTransition(nn.Module):
 
-	def __init__(self,inchan,outchan,layer,dilation_=1):
+	def __init__(self,inchan,layer,dilation_=1):
 		super(DownTransition, self).__init__()
 		self.dilation_ = dilation_
-		self.outchan = outchan
+		if inchan == 1: 
+			self.outchan = 8
+		else:
+			self.outchan = 2*inchan
 		self.layer = layer
 		self.down = nn.Conv2d(in_channels=inchan,out_channels=self.outchan,kernel_size=3,padding=1,stride=2) # /2
 		self.bn = nn.BatchNorm2d(num_features=self.outchan,affine=True)
@@ -83,10 +89,10 @@ class DownTransition(nn.Module):
 
 class UpTransition(nn.Module):
 
-	def __init__(self,inchan,outchan,layer,last=False):
+	def __init__(self,inchan,layer,last=False):
 		super(UpTransition, self).__init__()
 		self.last = last
-		self.outchan = outchan
+		self.outchan = inchan//2
 		self.layer = layer
 		self.up =  nn.ConvTranspose2d(in_channels=inchan,out_channels=self.outchan,kernel_size=4,padding=1,stride=2) # *2
 		self.bn = nn.BatchNorm2d(num_features=self.outchan,affine=True)
@@ -135,16 +141,16 @@ class Vnet(nn.Module):
 				nn.BatchNorm2d(8,affine=True),
 				nn.ELU(inplace=True)
 			)
-		self.down0 = DownTransition(inchan=8,outchan=16,layer=2,dilation_=2)  # 16*256^2
-		self.down1 = DownTransition(inchan=16,outchan=32,layer=2,dilation_=2) # 32*128^2
-		self.down2 = DownTransition(inchan=32,outchan=64,layer=2,dilation_=4) # 64*64^2
-		self.down3 = DownTransition(inchan=64,outchan=128,layer=2,dilation_=4) # 128*32^2
+		self.down0 = DownTransition(inchan=8,layer=2,dilation_=2)  # 16*256^2
+		self.down1 = DownTransition(inchan=16,layer=2,dilation_=2) # 32*128^2
+		self.down2 = DownTransition(inchan=32,layer=2,dilation_=2) # 64*64^2
+		self.down3 = DownTransition(inchan=64,layer=2,dilation_=4) # 128*32^2
 		
 
-		self.up3 = UpTransition(inchan=128,outchan=64,layer=2) # 64*64^2
-		self.up2 = UpTransition(inchan=64,outchan=32,layer=2) # 32*128^2
-		self.up1 = UpTransition(inchan=32,outchan=16,layer=2) # 16*256^2
-		self.up0 = UpTransition(inchan=16,outchan=4,layer=2,last=True) # 2*512^2
+		self.up3 = UpTransition(inchan=128,layer=2) # 64*64^2
+		self.up2 = UpTransition(inchan=64,layer=2) # 32*128^2
+		self.up1 = UpTransition(inchan=32,layer=2) # 16*256^2
+		self.up0 = UpTransition(inchan=16,layer=2,last=True) # 2*512^2
 
 		for m in self.modules():
 			if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
@@ -185,7 +191,6 @@ class dice_loss(nn.Module):
 
 import bioloss
 
-
 if __name__ == '__main__':
 
 	vnet = Vnet()
@@ -208,13 +213,13 @@ if __name__ == '__main__':
 
 			# print ("Train Epoch[%d/%d], Iter[%d]" %(e+1, epoch, index))			
 			optimizer.zero_grad()
-			image, target = to_var(image,volatile=False), to_var(target,volatile=False).float()
+			image, target = to_var(image), to_var(target).float()
 			output = vnet(image) # (N,HW)
 
 			target = target.view(target.numel())
 			loss = bioloss.dice_loss(output, target)
 			#loss = F.nll_loss(output, target)
-			total_loss += loss.data[0]
+			total_loss += loss
 			loss.backward()
 			optimizer.step()
 
@@ -242,49 +247,60 @@ if __name__ == '__main__':
 
 		vnet.eval()
 		total_loss = 0.0
-		new_loss = 0.0 
+		crf_loss = 0.0
 
 		for index,(image,target) in enumerate(testloader):
 
 			# print ("Valid Epoch[%d/%d], Iter[%d]" %(e+1, epoch, index))	
-			image, target = to_var(image,volatile=True), to_var(target,volatile=True).float()
+			image, target = to_var(image), to_var(target).float()
 			output = vnet(image)
-
+			# print('output',output.shape)
 			target = target.view(target.numel()) # (NDHW)
 			# total_loss += F.nll_loss(output, target)
 			loss = bioloss.dice_loss(output, target)
-			total_loss += loss.data[0]
+			total_loss += loss
 
-			del image, target, loss, output
+			image = image.data.cpu().numpy().reshape(-1,512,512,1) # (64,512,512,1)
+			output = output.data.cpu().numpy().reshape(-1,512,512,2) # (64,512,512,2) softmax
 
+			# print('image',image.shape,'output',output.shape)
 
-			# if e == 50 or e == 32:
-			# 	image = image.data.cpu().numpy().reshape(-1,512,512)
-			# 	target = target.data.cpu().numpy().reshape(-1,512,512)
-			# 	output = output.data.max(dim=1)[1].cpu().numpy().reshape(-1,512,512)
+			output = (-np.log(output)).transpose((0, 3, 1, 2))
+			new_output = output
 
-			# 	if index == 0:
-			# 		image_save = image 
-			# 		target_save = target 
-			# 		output_save = output 
-			# 	elif index == 1:
-			# 		image_save = np.concatenate((image_save,image),axis=0)
-			# 		target_save = np.concatenate((target_save,target),axis=0)
-			# 		output_save = np.concatenate((output_save,output),axis=0)
-			# 	else:
-			# 		image_save = np.concatenate((image_save,image),axis=0)
-			# 		target_save = np.concatenate((target_save,target),axis=0)
-			# 		output_save = np.concatenate((output_save,output),axis=0)
-			# 		print(image_save.shape,target_save.shape,output_save.shape)
+			for i in range(batch_size):
 
-			# 		if e == 50:
-			# 			np.save('data/image_save_50.npy',image_save)
-			# 			np.save('data/target_save_50.npy',target_save)
-			# 			np.save('data/output_save_50.npy',output_save)
-			# 		else:
-			# 			np.save('data/image_save_32.npy',image_save)
-			# 			np.save('data/target_save_32.npy',target_save)
-			# 			np.save('data/output_save_32.npy',output_save)
+				unary = unary_from_softmax(output[i]) # ? do we need log?
+				unary = np.ascontiguousarray(unary)
+
+				d = dcrf.DenseCRF(512*512, 2)
+				d.setUnaryEnergy(unary)
+
+				feats = create_pairwise_gaussian(sdims=(10, 10), shape=(512,512))
+				d.addPairwiseEnergy(feats, compat=3,
+				                    kernel=dcrf.DIAG_KERNEL,
+				                    normalization=dcrf.NORMALIZE_SYMMETRIC)
+
+				feats = create_pairwise_bilateral(sdims=(50, 50), schan=(20,),
+				                                   img=image[i], chdim=2)
+
+				d.addPairwiseEnergy(feats, compat=10,
+				                     kernel=dcrf.DIAG_KERNEL,
+				                     normalization=dcrf.NORMALIZE_SYMMETRIC)
+
+				Q = d.inference(10)
+				res = np.array(Q).transpose(1,0)
+				# print('res', res.shape)
+				
+				if i==0: 
+					new_output = res 
+				else:
+					new_output = np.concatenate((new_output,res),axis=0)
+
+			# print('new_output', new_output.shape)
+			new_output = to_var(torch.from_numpy(new_output))
+			loss = bioloss.dice_loss(new_output, target)
+			crf_loss += loss
 
 
 			# if index == 0 and e%10 == 9:
@@ -304,6 +320,7 @@ if __name__ == '__main__':
 
 
 		print ("Epoch[%d/%d], Valid Dice Coef: %.4f" %(e+1, epoch, total_loss/len(testloader)))
+		print ("Epoch[%d/%d], Valid Dice Coef using CRF: %.4f" %(e+1, epoch, crf_loss/len(testloader)))
 		# print ("Epoch[%d/%d], Valid Loss: %.2f, Valid Acc: %.2f" %(e+1, epoch, total_loss, 100*accuracy/cnt))
 
 

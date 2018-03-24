@@ -3,9 +3,9 @@ import numpy as np
 from scipy.misc import imresize
 import matplotlib.pyplot as plt
 
-# root = './data/promise12/Case'
-# image_set = []
-# label_set = []
+root = './data/PROS_Train/Case'
+image_set = []
+label_set = []
 
 # for i in range(50): 
 # 	if i<10 :
@@ -42,13 +42,13 @@ import matplotlib.pyplot as plt
 # image_set = image_set.astype(np.uint8)
 # label_set = label_set.astype(np.uint8)
 
-# np.save('data/PROS_image.npy',image_set)
-# np.save('data/PROS_label.npy',label_set)
+# np.save('data/PROS_3dimage.npy',image_set)
+# np.save('data/PROS_3dlabel.npy',label_set)
 
 
 
-# image_set = np.load('data/PROS_image.npy') # (50,64,512,512)
-# label_set = np.load('data/PROS_label.npy')
+# image_set = np.load('data/PROS_3dimage.npy') # (50,64,512,512)
+# label_set = np.load('data/PROS_3dlabel.npy')
 
 # print(image_set.dtype)
 
@@ -63,39 +63,43 @@ import matplotlib.pyplot as plt
 
 # for i in index[:44]: 
 # 	train_image_set.append(image_set[i])
-# 	train_image_set.append(np.flip(image_set[i],axis=0))
 # 	train_image_set.append(np.flip(image_set[i],axis=1))
 # 	train_image_set.append(np.flip(image_set[i],axis=2))
-# 	train_image_set.append(np.roll(image_set[i],shift=8,axis=0))
-# 	train_image_set.append(np.roll(image_set[i],shift=64,axis=1))
-# 	train_image_set.append(np.roll(image_set[i],shift=64,axis=2))
+# 	train_image_set.append(np.roll(image_set[i],shift=4,axis=0))
+# 	train_image_set.append(np.roll(image_set[i],shift=8,axis=1))
+# 	train_image_set.append(np.roll(image_set[i],shift=-8,axis=1))
+# 	train_image_set.append(np.roll(image_set[i],shift=8,axis=2))
+# 	train_image_set.append(np.roll(image_set[i],shift=-8,axis=2))
 
 # 	train_label_set.append(label_set[i])
-# 	train_label_set.append(np.flip(label_set[i],axis=0))
 # 	train_label_set.append(np.flip(label_set[i],axis=1))
 # 	train_label_set.append(np.flip(label_set[i],axis=2))
-# 	train_label_set.append(np.roll(label_set[i],shift=8,axis=0))
-# 	train_label_set.append(np.roll(label_set[i],shift=64,axis=1))
-# 	train_label_set.append(np.roll(label_set[i],shift=64,axis=2))
+# 	train_label_set.append(np.roll(label_set[i],shift=4,axis=0))
+# 	train_label_set.append(np.roll(label_set[i],shift=8,axis=1))
+# 	train_label_set.append(np.roll(label_set[i],shift=-8,axis=1))
+# 	train_label_set.append(np.roll(label_set[i],shift=8,axis=2))
+# 	train_label_set.append(np.roll(label_set[i],shift=-8,axis=2))
 # 	print(i)
 
 
 # for i in index[44:]: 
 # 	test_image_set.append(image_set[i])
-# 	test_image_set.append(np.flip(image_set[i],axis=0))
 # 	test_image_set.append(np.flip(image_set[i],axis=1))
 # 	test_image_set.append(np.flip(image_set[i],axis=2))
-# 	test_image_set.append(np.roll(image_set[i],shift=8,axis=0))
-# 	test_image_set.append(np.roll(image_set[i],shift=64,axis=1))
-# 	test_image_set.append(np.roll(image_set[i],shift=64,axis=2))
+# 	test_image_set.append(np.roll(image_set[i],shift=4,axis=0))
+# 	test_image_set.append(np.roll(image_set[i],shift=8,axis=1))
+# 	test_image_set.append(np.roll(image_set[i],shift=-8,axis=1))
+# 	test_image_set.append(np.roll(image_set[i],shift=8,axis=2))
+# 	test_image_set.append(np.roll(image_set[i],shift=-8,axis=2))
 
 # 	test_label_set.append(label_set[i])
-# 	test_label_set.append(np.flip(label_set[i],axis=0))
 # 	test_label_set.append(np.flip(label_set[i],axis=1))
 # 	test_label_set.append(np.flip(label_set[i],axis=2))
-# 	test_label_set.append(np.roll(label_set[i],shift=8,axis=0))
-# 	test_label_set.append(np.roll(label_set[i],shift=64,axis=1))
-# 	test_label_set.append(np.roll(label_set[i],shift=64,axis=2))
+# 	test_label_set.append(np.roll(label_set[i],shift=4,axis=0))
+# 	test_label_set.append(np.roll(label_set[i],shift=8,axis=1))
+# 	test_label_set.append(np.roll(label_set[i],shift=-8,axis=1))
+# 	test_label_set.append(np.roll(label_set[i],shift=8,axis=2))
+# 	test_label_set.append(np.roll(label_set[i],shift=-8,axis=2))
 # 	print(i)
 
 # train_image_set = np.asarray(train_image_set).reshape(-1,64,512,512)
@@ -105,16 +109,16 @@ import matplotlib.pyplot as plt
 
 # print(train_image_set.shape,train_label_set.shape,test_image_set.shape,test_label_set.shape)
 
-# np.save('data/PROS_train_image.npy',train_image_set)
-# np.save('data/PROS_train_label.npy',train_label_set)
-# np.save('data/PROS_test_image.npy',test_image_set)
-# np.save('data/PROS_test_label.npy',test_label_set)
+# np.save('data/PROS_3dtrain_image.npy',train_image_set)
+# np.save('data/PROS_3dtrain_label.npy',train_label_set)
+# np.save('data/PROS_3dtest_image.npy',test_image_set)
+# np.save('data/PROS_3dtest_label.npy',test_label_set)
 
 print('loading...')
-train_image_set = np.load('data/PROS_train_image.npy') # (308,64,512,512)
-train_label_set = np.load('data/PROS_train_label.npy')
-test_image_set = np.load('data/PROS_test_image.npy') # (42,64,512,512)
-test_label_set = np.load('data/PROS_test_label.npy')
+train_image_set = np.load('data/PROS_3dtrain_image.npy') # (352,64,512,512)
+train_label_set = np.load('data/PROS_3dtrain_label.npy')
+test_image_set = np.load('data/PROS_3dtest_image.npy') # (48,64,512,512)
+test_label_set = np.load('data/PROS_3dtest_label.npy')
 
 
 import torch.utils.data as data
