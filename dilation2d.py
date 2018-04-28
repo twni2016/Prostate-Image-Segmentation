@@ -16,7 +16,7 @@ if __name__ == '__main__':
 	import argparse
 	parser = argparse.ArgumentParser(description='PROS12')
 	parser.add_argument('-b', '--batch', type=int, default=48, help='input batch size for training (default: 64)')
-	parser.add_argument('-e', '--epoch', type=int, default=55, help='number of epochs to train (default: 50)')
+	parser.add_argument('-e', '--epoch', type=int, default=50, help='number of epochs to train (default: 50)')
 	parser.add_argument('--lr', type=float, default=0.001, help='learning rate (default: 0.001)')
 	parser.add_argument('--gpu', type=int, default=4, help='GPU (default: 4)')
 	args = parser.parse_args()
@@ -194,7 +194,7 @@ if __name__ == '__main__':
 
 	optimizer = torch.optim.Adam(vnet.parameters(), lr=lr, weight_decay=0.0001)
 	# optimizer = torch.optim.SGD(vnet.parameters(), lr=lr, momentum=0.9, weight_decay=0.0001, nesterov=True)
-	scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20,30,40], gamma=0.1)
+	scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[14,24,34,44], gamma=0.1)
 
 	criterion = dice_loss()
 
@@ -208,7 +208,7 @@ if __name__ == '__main__':
 
 			# print ("Train Epoch[%d/%d], Iter[%d]" %(e+1, epoch, index))			
 			optimizer.zero_grad()
-			image, target = to_var(image,volatile=False), to_var(target,volatile=False).float()
+			image, target = to_var(image,volatile=False).float(), to_var(target,volatile=False).float()
 			output = vnet(image) # (N,HW)
 
 			target = target.view(target.numel())
@@ -242,12 +242,11 @@ if __name__ == '__main__':
 
 		vnet.eval()
 		total_loss = 0.0
-		new_loss = 0.0 
 
 		for index,(image,target) in enumerate(testloader):
 
 			# print ("Valid Epoch[%d/%d], Iter[%d]" %(e+1, epoch, index))	
-			image, target = to_var(image,volatile=True), to_var(target,volatile=True).float()
+			image, target = to_var(image,volatile=True).float(), to_var(target,volatile=True).float()
 			output = vnet(image)
 
 			target = target.view(target.numel()) # (NDHW)

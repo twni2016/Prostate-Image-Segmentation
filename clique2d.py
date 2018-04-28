@@ -15,10 +15,10 @@ if __name__ == '__main__':
 	# argparse settings
 	import argparse
 	parser = argparse.ArgumentParser(description='PROS12')
-	parser.add_argument('-b', '--batch', type=int, default=32, help='input batch size for training (default: 64)')
+	parser.add_argument('-b', '--batch', type=int, default=16, help='input batch size for training (default: 64)')
 	parser.add_argument('-e', '--epoch', type=int, default=55, help='number of epochs to train (default: 50)')
 	parser.add_argument('--lr', type=float, default=0.001, help='learning rate (default: 0.001)')
-	parser.add_argument('--gpu', type=int, default=4, help='GPU (default: 4)')
+	parser.add_argument('--gpu', type=int, default=2, help='GPU (default: 4)')
 	args = parser.parse_args()
 
 
@@ -477,20 +477,20 @@ import bioloss
 
 if __name__ == '__main__':
 
-	model = CliqueNet(input_channels=4, list_channels=[8, 8, 8], list_layer_num=[5, 5, 5])
+	model = CliqueNet(input_channels=8, list_channels=[8, 8, 8], list_layer_num=[5, 5, 5])
 	if torch.cuda.is_available():
 		model = torch.nn.DataParallel(model, device_ids=gpu_list).cuda()
 
 	optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=0.0001)
 	# optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=0.0001, nesterov=True)
-	scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20,30,40], gamma=0.1)
-
+	# scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20,30,40], gamma=0.1)
+	scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=6, threshold=0.04, threshold_mode='abs')
 
 	for e in range(epoch):
 
 		model.train()
 		total_loss = 0.0
-		scheduler.step() 
+		# scheduler.step() 
 
 		for index,(image,target) in enumerate(trainloader):
 
@@ -587,6 +587,8 @@ if __name__ == '__main__':
 
 
 		print ("Epoch[%d/%d], Valid Dice Coef: %.4f" %(e+1, epoch, total_loss/len(testloader)))
+		scheduler.step(total_loss/len(testloader))
+		print('learning rate',optimizer.param_groups[0]['lr'])
 		# print ("Epoch[%d/%d], Valid Loss: %.2f, Valid Acc: %.2f" %(e+1, epoch, total_loss, 100*accuracy/cnt))
 
 

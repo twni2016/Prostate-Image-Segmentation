@@ -9,13 +9,14 @@ import torchvision as tv
 import numpy as np
 import matplotlib.pyplot as plt
 
+torch.backends.cudnn.benchmark=True
 
 if __name__ == '__main__':
 
 	# argparse settings
 	import argparse
 	parser = argparse.ArgumentParser(description='PROS12')
-	parser.add_argument('-b', '--batch', type=int, default=8, help='input batch size for training (default: 64)')
+	parser.add_argument('-b', '--batch', type=int, default=4, help='input batch size for training (default: 64)')
 	parser.add_argument('-e', '--epoch', type=int, default=30, help='number of epochs to train (default: 50)')
 	parser.add_argument('--lr', type=float, default=0.001, help='learning rate (default: 0.001)')
 	parser.add_argument('--gpu', type=int, default=4, help='GPU (default: 4)')
@@ -183,8 +184,6 @@ if __name__ == '__main__':
 	optimizer = torch.optim.Adam(vnet.parameters(), lr=lr, weight_decay=0.0001)
 	# optimizer = torch.optim.SGD(vnet.parameters(), lr=lr, momentum=0.9, weight_decay=0.0001, nesterov=True)
 	scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[20,30,40], gamma=0.1)
-
-	criterion = dice_loss()
 
 	for e in range(epoch):
 

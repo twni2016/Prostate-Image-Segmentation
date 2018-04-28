@@ -9,9 +9,10 @@ import numpy as np
 import torch.utils.data as data
 
 
+
 # root = './data/PROS_Train/Case'
-# image_set = np.array([],dtype=np.int16).reshape(0,512,512) # actually 16 bits
-# label_set = np.array([],dtype=np.int8).reshape(0,512,512) # actually 1 bit
+# image_set = np.array([],dtype=np.int64).reshape(0,512,512)
+# label_set = np.array([],dtype=np.int64).reshape(0,512,512)
 
 # # first shuffle 
 # index = np.arange(50)
@@ -27,6 +28,8 @@ import torch.utils.data as data
 
 # 	image = sitk.GetArrayFromImage(image)
 # 	label = sitk.GetArrayFromImage(label)
+
+# 	image[image>255] = 255 # [0,255]
 
 # 	depth = image.shape[0]
 # 	height = image.shape[1]
@@ -44,55 +47,47 @@ import torch.utils.data as data
 
 # 	print(i)
 
-# print(image_set.shape,label_set.shape,image_set.dtype,label_set.dtype)
+# print(image_set.shape,label_set.shape)
+# image_set = image_set.astype(np.uint8)
+# label_set = label_set.astype(np.uint8)
 # print('image_set:max/min',image_set.max(),image_set.min())
 # print('label_set:max/min',label_set.max(),label_set.min())
 
-# image_set = image_set.astype(np.int16)
-# label_set = label_set.astype(np.int8)
-# print(image_set.shape,label_set.shape,image_set.dtype,label_set.dtype)
-# print('image_set:max/min',image_set.max(),image_set.min())
-# print('label_set:max/min',label_set.max(),label_set.min())
-
-# np.save('data/image2d.npy',image_set)
-# np.save('data/label2d.npy',label_set)
+# np.save('data/PROS_Train/image2d.npy',image_set)
+# np.save('data/PROS_Train/label2d.npy',label_set)
 
 
 
-# 2018.1.15 以上
+# 2017.1.15 以上
 
-print('loading')
-image_set = np.load('data/image2d.npy')
+image_set = np.load('Hao_SUN/conv_3_images_0410.npy')
 label_set = np.load('data/label2d.npy')
-print('finish loading')
+label_set = label_set[:,144:-144,144:-144]
+print(image_set.shape)
+# label_set = 1*(label_set.sum((1,2))>0)
+# print(label_set.max())
 
-train_image_set = np.zeros((1185*5,512,512))
-train_label_set = np.zeros((1185*5,512,512))
-train_image_set[:1185] = image_set[:1185] # 192 test images
+train_image_set = image_set[:1185*5]
+train_label_set = np.zeros((1185*5,224,224))
 train_label_set[:1185] = label_set[:1185]
 
-test_image_set = image_set[1185:]
+test_image_set = image_set[1185*5:]
+print(test_image_set.shape,test_image_set.dtype)
 test_label_set = label_set[1185:]
-print('start augmentation')
+print(test_label_set.shape,test_label_set.dtype)
 
 cnt = 1185
 for i in range(0,1185):
 	# train_image_set[cnt]   = np.flip(train_image_set[i],axis=0) # vertical flip
-	# train_label_set[cnt]   = train_label_set[i]
+	train_label_set[cnt]   = train_label_set[i]
 	# train_image_set[cnt+1] = np.flip(train_image_set[i],axis=1) # horizontal flip
-	# train_label_set[cnt+1] = train_label_set[i]
-	train_image_set[cnt] = np.roll(train_image_set[i],shift=4,axis=0) # vertical translation
-	train_label_set[cnt] = train_label_set[i]
-	train_image_set[cnt+1] = np.roll(train_image_set[i],shift=-4,axis=0) # vertical translation
 	train_label_set[cnt+1] = train_label_set[i]
-	train_image_set[cnt+2] = np.roll(train_image_set[i],shift=4,axis=1) # horizontal translation
+	# train_image_set[cnt+2] = np.roll(train_image_set[i],shift=4,axis=0) # vertical translation
 	train_label_set[cnt+2] = train_label_set[i]
-	train_image_set[cnt+3] = np.roll(train_image_set[i],shift=-4,axis=1) # horizontal translation
+	# train_image_set[cnt+3] = np.roll(train_image_set[i],shift=-4,axis=0) # vertical translation
 	train_label_set[cnt+3] = train_label_set[i]
 
 	cnt += 4
-
-print('end augmentation')
 
 train_image_set = train_image_set.astype(np.float32) # PyTorch default floarTensor is 32 bit
 train_label_set = train_label_set.astype(np.float32)
@@ -107,19 +102,19 @@ class PROS12(data.Dataset):
 		if self.train is True:
 
 			self.train_data = train_image_set 
-			self.train_data = self.train_data.reshape(-1,1,512,512) # NCHW
+			self.train_data = self.train_data.reshape(-1,1,224,224) # NCHW
 			self.train_data = self.train_data.transpose((0, 2, 3, 1)) # NHWC
 			self.train_label = train_label_set 
-			self.train_label = self.train_label.reshape(-1,1,512,512) # NCHW
+			self.train_label = self.train_label.reshape(-1,1,224,224) # NCHW
 			self.train_label = self.train_label.transpose((0, 2, 3, 1)) 
 
 		else:
 
 			self.test_data = test_image_set 
-			self.test_data = self.test_data.reshape(-1,1,512,512) # NCHW
+			self.test_data = self.test_data.reshape(-1,1,224,224) # NCHW
 			self.test_data = self.test_data.transpose((0, 2, 3, 1)) 
 			self.test_label = test_label_set 
-			self.test_label = self.test_label.reshape(-1,1,512,512) # NCHW
+			self.test_label = self.test_label.reshape(-1,1,224,224) # NCHW
 			self.test_label = self.test_label.transpose((0, 2, 3, 1)) 
 
 	def __getitem__(self, index):
@@ -139,7 +134,7 @@ class PROS12(data.Dataset):
 		else:
 			return len(self.test_data)
 
-print('dataset is entirely loaded!')
+print('dataset is loaded!')
 
 
 

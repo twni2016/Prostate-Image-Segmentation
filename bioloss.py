@@ -32,7 +32,7 @@ class DiceLoss(Function):
         self.target_.copy_(target)
         target = self.target_
 #       print(input)
-        intersect = torch.dot(result, target)
+        intersect = torch.dot(result, target) + eps # Bug!!!
         # binary values so sum the same as sum of squares
         result_sum = torch.sum(result)
         target_sum = torch.sum(target)
